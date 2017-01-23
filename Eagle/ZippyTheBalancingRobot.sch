@@ -13869,7 +13869,7 @@ For COM-09806 in the SparkFun catalog&lt;br&gt;</description>
 <part name="SUPPLY10" library="SparkFun-Aesthetics" deviceset="5V" device=""/>
 <part name="SUPPLY11" library="SparkFun-Aesthetics" deviceset="5V" device=""/>
 <part name="SUPPLY12" library="SparkFun-Aesthetics" deviceset="VIN" device=""/>
-<part name="C5" library="adafruit" deviceset="CPOL-US" device="E3.5-8"/>
+<part name="C5" library="adafruit" deviceset="CPOL-US" device="E3.5-8" value="470 uF"/>
 <part name="C6" library="SparkFun-Capacitors" deviceset="CAP" device="PTH" value="0.1 uF"/>
 <part name="RC" library="SparkFun-Connectors" deviceset="M04" device="PTH"/>
 <part name="GND14" library="SparkFun-Aesthetics" deviceset="GND" device=""/>
