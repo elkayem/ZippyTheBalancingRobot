@@ -23,7 +23,7 @@
 #include <digitalWriteFast.h>
 #include <LiquidCrystal.h>
 
-// #define CALCTIME_SERIALOUT  // Uncomment to calculate processing time and send to serial monitor
+//#define CALCTIME  // Uncomment to calculate processing time
 
 /*
   LCD Circuit:
@@ -113,7 +113,7 @@ volatile long _RightEncoderTicks = 0;
 #define wheelRateGain 0.003f
 #define Kp_Rotation 0.1f
 
-#define PitchCalOffsetDefault -2.0f
+#define PitchCalOffsetDefault 0.0f // -2.0f
 
 uint32_t LastTime = 0;
 bool layingDown = true; // Use to indicate if the robot is laying down
@@ -127,7 +127,7 @@ uint8_t i2cBuffer[14];
 
 float PitchEst, BiasEst;
 
-float gyroXzero;
+float gyroYzero;
 float PitchCalOffset;
 float IntState = 0;  // Integral State
 
@@ -135,10 +135,6 @@ float voltageFilt = 0;
 
 void setup(void)
 {
-#ifdef CALCTIME_SERIALOUT
-  Serial.begin(9600);
-  Serial.println();
-#endif
   lcd.begin(16, 2);
   lcd.print("Lay Zippy down");
   lcd.setCursor(0, 1);
@@ -222,7 +218,7 @@ void setup(void)
   lcd.print(PitchCalOffset);
   lcd.setCursor(8, 0);
   lcd.print(" R: ");
-  lcd.print(gyroXzero);
+  lcd.print(gyroYzero);
   lcd.setCursor(0, 1);
   lcd.print("Push Button");
   while (analogRead(buttonPin) < 800);
@@ -238,9 +234,9 @@ void setup(void)
     PitchEst = 0;
     for (int i = 0; i < 50; i++) {
       while (i2cRead(0x3B, i2cBuffer, 14));
-      int16_t AcY = ((i2cBuffer[2] << 8) | i2cBuffer[3]);
+      int16_t AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
       int16_t AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-      PitchEst += atan2((float)AcY, (float)AcZ) * RAD_TO_DEG;
+      PitchEst -= atan2((float)AcX, (float)AcZ) * RAD_TO_DEG;
       if (analogRead(buttonPin) > 800) {
         button_pushed = 1;
       }
@@ -319,12 +315,12 @@ void loop(void)
 
   // Read Gyro Data
   while (i2cRead(0x3B, i2cBuffer, 14));
-  int16_t AcY = ((i2cBuffer[2] << 8) | i2cBuffer[3]);
+  int16_t AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
   int16_t AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-  int16_t GyX = ((i2cBuffer[8] << 8) | i2cBuffer[9]);
+  int16_t GyY = ((i2cBuffer[10] << 8) | i2cBuffer[11]);
 
-  accAngle = atan2((float)AcY, (float)AcZ) * RAD_TO_DEG - PitchCalOffset;
-  gyroRate = (float)GyX / 131.0f - gyroXzero; // Convert to deg/s
+  accAngle = -atan2((float)AcX, (float)AcZ) * RAD_TO_DEG - PitchCalOffset;
+  gyroRate = (float)GyY / 131.0f - gyroYzero; // Convert to deg/s
 
   KalmanFilter(accAngle, gyroRate);
 
@@ -353,6 +349,7 @@ void loop(void)
     }
     voltageTimer = millis();
   }
+#ifndef CALCTIME
   if (millis() - voltageTimerOut > 10000) {
     lcd.clear();
     if (RechargeBattery) {
@@ -367,7 +364,7 @@ void loop(void)
     lcd.print(" V");
     voltageTimerOut = millis();
   }
-
+#endif
 
   if ((layingDown && (PitchEst < -5 || PitchEst > 5)) || (~layingDown && (PitchEst < -45 || PitchEst > 45))) {
     layingDown = true;
@@ -485,7 +482,7 @@ void loop(void)
   pwmWrite(MotorL_PWM, dutyCycle_L);
   pwmWrite(MotorR_PWM, dutyCycle_R);
 
-#ifdef CALCTIME_SERIALOUT
+#ifdef CALCTIME
   MaxCalcTime, AveCalcTime, TimeCounter, NumSamples;
   CalcTime = micros() - LastTime;
   if (MaxCalcTime < CalcTime) {
@@ -497,12 +494,12 @@ void loop(void)
     TimeCounter = millis();
     AveCalcTime /= NumSamples;
     NumSamples = 0;
-    Serial.print("Average Calculation Time: ");
-    Serial.print((float)AveCalcTime / 1000.0f);
-    Serial.print(" msec,  ");
-    Serial.print("Maximum Calculation Time: ");
-    Serial.print((float)MaxCalcTime / 1000.0f);
-    Serial.println(" msec");
+    lcd.clear();
+    lcd.print("Ave: ");
+    lcd.print((float)AveCalcTime / 1000.0f);
+    lcd.setCursor(0, 1);
+    lcd.print("Max: ");
+    lcd.print((float)MaxCalcTime / 1000.0f);
     MaxCalcTime = 0;
     AveCalcTime = 0;
   }
@@ -510,7 +507,6 @@ void loop(void)
 
   while (micros() - LastTime < DT);
   LastTime = micros();
-
 }
 
 float KalmanFilter(float PitchMeas, float RateMeas) {
@@ -544,26 +540,26 @@ float KalmanFilter(float PitchMeas, float RateMeas) {
 }
 
 bool calibrateGyro() {
-  int16_t gyroXbuffer[50], AcY, AcZ;
+  int16_t gyroYbuffer[50], AcX, AcZ;
 
-  gyroXzero = 0;
+  gyroYzero = 0;
   PitchCalOffset = 0;
 
   for (uint8_t i = 0; i < 50; i++) {
     while (i2cRead(0x3B, i2cBuffer, 14));
-    AcY = ((i2cBuffer[2] << 8) | i2cBuffer[3]);
+    AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
     AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-    PitchCalOffset += atan2((float)AcY, (float)AcZ) * RAD_TO_DEG;
-    gyroXbuffer[i] = ((i2cBuffer[8] << 8) | i2cBuffer[9]);
-    gyroXzero += gyroXbuffer[i];
+    PitchCalOffset -= atan2((float)AcX, (float)AcZ) * RAD_TO_DEG;
+    gyroYbuffer[i] = ((i2cBuffer[10] << 8) | i2cBuffer[11]);
+    gyroYzero += gyroYbuffer[i];
     delay(10);
   }
-  if (!checkMinMax(gyroXbuffer, 50, 2000)) {
+  if (!checkMinMax(gyroYbuffer, 50, 2000)) {
     return 1;
   }
 
   PitchCalOffset /= 50.0f;
-  gyroXzero /= (50.0f * 131.0f);
+  gyroYzero /= (50.0f * 131.0f);
   return 0;
 }
 
