@@ -2,7 +2,7 @@
 
 ![Zippy](/images/IMG_1361.JPG)
 
-Zippy is an Arduino Nano based balancing robot.  The original prototype version was put together on a breadboard with lots of jumper wires.  This is certainly a great way to get started.  The STMicroelectronics 8A motor drivers do not come in a convenient package, but ST does provide evaluation boards which work well with a prototype system.
+Zippy is an Arduino Nano based balancing robot.  The original prototype version was put together on a breadboard with lots of jumper wires.  This is certainly a great way to get started.  The STMicroelectronics 8A motor drivers do not come in a convenient package for breadboarding, but ST does provide evaluation boards which work well with a prototype system.
 
 The latest version uses a PCB, allowing the motor drivers to be mounted directly to the board.  This yields a more compact design, but does require some SMD work and an additional outlay for PCB manufacture.  Even with the fine 0.5 mm pitch, the drivers can be hand soldered to the board (I did!) with a steady hand and some patience.  There are plenty of YouTube videos on how to do this.
 
