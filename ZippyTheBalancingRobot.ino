@@ -17,14 +17,16 @@
  *    source of inspiration for this software
  */
 
-#include<Wire.h>
-#include <PWM.h>
-#include <PinChangeInt.h>
-#include <digitalWriteFast.h>
-#include <LiquidCrystal.h>
+#include <Wire.h>             // I2C Library
+#include <PWM.h>              // PWM Frequency Library at https://code.google.com/archive/p/arduino-pwm-frequency-library/downloads
+#include <EnableInterrupt.h>  // Enable Interrupt library
+#include <digitalWriteFast.h> // DigitalWriteFast Library
+#include <LiquidCrystal.h>    // Liquid Crystal library
 
-//#define CALCTIME  // Uncomment to calculate processing time
+// Uncomment CALCTIME to calculate processing time and display on LCD.  
+// Time needs to be under 5 msec for reliable performance at 200 Hz
 
+//#define CALCTIME  
 /*
   LCD Circuit:
  * #1: LCD RS pin to digital pin 1
@@ -50,14 +52,11 @@
 #define LCD_Pin5 16
 #define LCD_Pin6 17
 
-#define c_RightEncoderInterrupt 0
 #define c_RightEncoderPinA 2
 #define c_RightEncoderPinB 4
 
-#define c_LeftEncoderInterrupt 1
 #define c_LeftEncoderPinA 3
 #define c_LeftEncoderPinB 12
-
 
 #define ThrottlePin 5
 #define SteeringPin  6
@@ -91,7 +90,7 @@ volatile long _LeftEncoderTicks = 0;
 volatile bool _RightEncoderBSet;
 volatile long _RightEncoderTicks = 0;
 
-#define DEG_PER_COUNT 0.75f  // 480 Counts per Revolution
+#define DEG_PER_COUNT 0.75f      // 480 Counts per Revolution
 #define VOLT_PER_COUNT 0.01465f  // 5 V * (30 kOhm)/(10 kOhm) / 1024
 
 #define THROTTLE_FLAG 1
@@ -113,35 +112,29 @@ volatile long _RightEncoderTicks = 0;
 #define wheelRateGain 0.003f
 #define Kp_Rotation 0.1f
 
-#define PitchCalOffsetDefault 0.0f // -2.0f
-
 uint32_t LastTime = 0;
-bool layingDown = true; // Use to indicate if the robot is laying down
 
 float MotorScaleFactor = 0.01f;
 bool RechargeBattery = 0;
  
 // Gyro Address
-const int MPU = 0x68; // I2C address of the MPU-6050
+static const uint8_t IMU = 0x68; // I2C address of the MPU-6050
 uint8_t i2cBuffer[14];
 
+float accAngle, gyroRate;
 float PitchEst, BiasEst;
 
 float gyroYzero;
-float PitchCalOffset;
 float IntState = 0;  // Integral State
 
 float voltageFilt = 0;
 
 void setup(void)
-{
+{  
   lcd.begin(16, 2);
   lcd.print("Lay Zippy down");
   lcd.setCursor(0, 1);
   lcd.print("and press button");
-  while (analogRead(buttonPin) < 800);
-  lcd.clear();
-  lcd.print("Calibrating");
 
   // Motor PWM Setup
   InitTimersSafe();  // Initialize timers for new PWM frequency
@@ -153,25 +146,25 @@ void setup(void)
   digitalWrite(ThrottlePin, HIGH); //use the internal pullup resistor
   pinMode(SteeringPin, INPUT);
   digitalWrite(SteeringPin, HIGH); //use the internal pullup resistor
-
-  PCintPort::attachInterrupt(ThrottlePin, calcThrottle, CHANGE);
-  PCintPort::attachInterrupt(SteeringPin, calcSteering, CHANGE);
-
+  
+  enableInterrupt(ThrottlePin, calcThrottle, CHANGE);
+  enableInterrupt(SteeringPin, calcSteering, CHANGE);
+  
   // Quadrature encoder Setup
   // Left encoder
   pinMode(c_LeftEncoderPinA, INPUT);      // sets pin A as input
   digitalWrite(c_LeftEncoderPinA, LOW);  // turn on pulldown resistor
   pinMode(c_LeftEncoderPinB, INPUT);      // sets pin B as input
   digitalWrite(c_LeftEncoderPinB, LOW);  // pulldown resistor
-  attachInterrupt(c_LeftEncoderInterrupt, HandleLeftMotorInterruptA, RISING);
-
+  enableInterrupt(c_LeftEncoderPinA, HandleLeftMotorInterruptA, RISING);
+  
   // Right encoder
   pinMode(c_RightEncoderPinA, INPUT);      // sets pin A as input
   digitalWrite(c_RightEncoderPinA, LOW);  // pulldown resistor
   pinMode(c_RightEncoderPinB, INPUT);      // sets pin B as input
   digitalWrite(c_RightEncoderPinB, LOW);  // pulldown resistor
-  attachInterrupt(c_RightEncoderInterrupt, HandleRightMotorInterruptA, RISING);
-
+  enableInterrupt(c_RightEncoderPinA, HandleRightMotorInterruptA, RISING);
+  
   // Set up Gyro
   Wire.begin();
   Wire.setClock(400000UL); // Set I2C frequency to 400kHz
@@ -191,80 +184,15 @@ void setup(void)
   delay(100); // Wait for the sensor to get ready
 
   /* Calibrate gyro zero value */
+  
+  while (analogRead(buttonPin) < 800);
+  lcd.clear();
+  lcd.print("Calibrating Gyro");
+  
   while (calibrateGyro()); // Run again if the robot is moved while calibrating
 
-  while (PitchCalOffset > 0) { // Calibrate on -90 deg side
-    lcd.clear();
-    lcd.print("Flip over");
-    lcd.setCursor(0, 1);
-    lcd.print("and press button");
-    while (analogRead(buttonPin) < 800);
-    delay(500);
-    while (calibrateGyro());
-  }
-  PitchCalOffset += 90.8f;
+  standUpRobot();  // Ask user to stand up robot and push button when ready
 
-  if (PitchCalOffset < -3.5f || PitchCalOffset > -0.5f) {
-    lcd.clear();
-    lcd.print("Not level, using");
-    lcd.setCursor(0, 1);
-    lcd.print("dflt. Push bttn.");
-    PitchCalOffset = PitchCalOffsetDefault;
-    while (analogRead(buttonPin) < 800);
-    delay(500);
-  }
-  lcd.clear();
-  lcd.print("P: ");
-  lcd.print(PitchCalOffset);
-  lcd.setCursor(8, 0);
-  lcd.print(" R: ");
-  lcd.print(gyroYzero);
-  lcd.setCursor(0, 1);
-  lcd.print("Push Button");
-  while (analogRead(buttonPin) < 800);
-  delay(500);
-
-  lcd.clear();
-  lcd.print("Push when ready");
-
-  int button_pushed = 0;
-  unsigned long timer;
-  while (!button_pushed) {
-    timer = millis();
-    PitchEst = 0;
-    for (int i = 0; i < 50; i++) {
-      while (i2cRead(0x3B, i2cBuffer, 14));
-      int16_t AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
-      int16_t AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-      PitchEst -= atan2((float)AcX, (float)AcZ) * RAD_TO_DEG;
-      if (analogRead(buttonPin) > 800) {
-        button_pushed = 1;
-      }
-    }
-    PitchEst /= 50.0f;
-    PitchEst -= PitchCalOffset;
-    lcd.setCursor(0, 1);
-    lcd.print("Pitch: ");
-    lcd.print(PitchEst);
-    while (millis() < timer + 500) {
-      if (analogRead(buttonPin) > 800) {
-        button_pushed = 1;
-      }
-    }
-  }
-  for (int i = 0; i < 20; i++) {
-    voltageFilt += (float)analogRead(voltSensePin) * VOLT_PER_COUNT;
-  }
-  voltageFilt /= 20.0f;
-
-  lcd.clear();
-  lcd.print("Go Zippy Go!!");
-  lcd.setCursor(0, 1);
-  lcd.print("Battery: ");
-  lcd.print(voltageFilt);
-  lcd.print(" V");
-  delay(100);
-  LastTime = micros();
 }
 
 /*
@@ -275,7 +203,7 @@ void loop(void)
   int i;
   static unsigned long int timer, encoderTimer, voltageTimer, voltageTimerOut;
   static int throttle_glitch_persistent, steer_glitch_persistent;
-  static float Error, lastError, wheelVelocity;
+  static float Error, wheelVelocity;
   static double wheelPosition, lastWheelPosition, rotationAngle;
   static unsigned long int WheelSpeedTimer;
   static double PosCmd, rotationCmd;
@@ -287,8 +215,6 @@ void loop(void)
   static float TurnTorque;
   int dutyCycle_L = 0, dutyCycle_R = 0;
   float Kp_fb = 0, Ki_fb = 0, Kd_fb = 0;
-  float accAngle; // Result from raw accelerometer
-  float gyroRate;
   float AngleOffset;
   static unsigned long int CalcTime, MaxCalcTime, AveCalcTime, TimeCounter;
   static int NumSamples;
@@ -313,15 +239,8 @@ void loop(void)
     interrupts(); // we have local copies of the inputs, so now we can turn interrupts back on
   }
 
-  // Read Gyro Data
-  while (i2cRead(0x3B, i2cBuffer, 14));
-  int16_t AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
-  int16_t AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-  int16_t GyY = ((i2cBuffer[10] << 8) | i2cBuffer[11]);
-
-  accAngle = -atan2((float)AcX, (float)AcZ) * RAD_TO_DEG - PitchCalOffset;
-  gyroRate = (float)GyY / 131.0f - gyroYzero; // Convert to deg/s
-
+  // Read and filter gyro data
+  readIMUdata(&accAngle, &gyroRate);
   KalmanFilter(accAngle, gyroRate);
 
   // Calculate Wheel Position & Speed at 10 Hz
@@ -366,20 +285,32 @@ void loop(void)
   }
 #endif
 
-  if ((layingDown && (PitchEst < -5 || PitchEst > 5)) || (~layingDown && (PitchEst < -45 || PitchEst > 45))) {
-    layingDown = true;
-    digitalWriteFast(MotorL_A, LOW);
+  if (PitchEst < -45 || PitchEst > 45) {  // Robot has fallen down
+
+    // Disable motors
+    digitalWriteFast(MotorL_A, LOW);  
     digitalWriteFast(MotorL_B, LOW);
     digitalWriteFast(MotorR_A, LOW);
     digitalWriteFast(MotorR_B, LOW);
+    pwmWrite(MotorL_PWM, 0);
+    pwmWrite(MotorR_PWM, 0);
+
+    // Reset integrator and encoder position
     IntState = 0;
     _LeftEncoderTicks = 0; LeftEncoderTicks = 0;
     _RightEncoderTicks = 0; RightEncoderTicks = 0;
+
+    wheelPosition = 0; lastWheelPosition = 0;
+    wheelVelocity = 0; WheelSpeedTimer = millis();
+
+    PosCmd = 0; rotationCmd = 0; 
+
+    standUpRobot();  // Ask user to stand robot back up
+    return;
   }
   else {
-    layingDown = false;
-
-    // Filter ThrottleIn and confert to AOCmd
+    
+    // Filter ThrottleIn and convert to AOCmd
     if (ThrottleIn > 800 && ThrottleIn < 2200 && !RechargeBattery) {  // Valid range
       if ((abs(ThrottleIn - ThrottleInGood) < 200) || (throttle_glitch_persistent > 20)) { // Changes greater than 200 are assumed to be a glitch
         ThrottleInGood = ThrottleIn;
@@ -409,7 +340,6 @@ void loop(void)
     }
     AngleOffset = constrain(AngleOffset, -10.0f, 10.0f);
 
-    lastError = Error;
     Error = AngleOffset - PitchEst;
     IntState = IntState + Error / FHz;
     IntState = constrain(IntState, -5.0f, 5.0f);
@@ -420,7 +350,7 @@ void loop(void)
 
     TorqueCMD = Kp_fb + Ki_fb + Kd_fb;
 
-    // Filter SteeringIn and confert to TurnTorque
+    // Filter SteeringIn and convert to TurnTorque
     if (SteeringIn > 800 && SteeringIn < 2200 && !RechargeBattery) {  // Valid range
       if ((abs(SteeringIn - SteeringInGood) < 200) || (steer_glitch_persistent > 20)) { // Changes greater than 200 are assumed to be a glitch
         SteeringInGood = SteeringIn;
@@ -477,8 +407,6 @@ void loop(void)
     }
   }
 
-  //dutyCycle_L = 0;
-  //dutyCycle_R = 0;
   pwmWrite(MotorL_PWM, dutyCycle_L);
   pwmWrite(MotorR_PWM, dutyCycle_R);
 
@@ -507,6 +435,51 @@ void loop(void)
 
   while (micros() - LastTime < DT);
   LastTime = micros();
+}
+
+// Stand up robot and wait for button push
+void standUpRobot() {
+  lcd.clear();
+  lcd.print("Stand & Push Btn");
+
+  int button_pushed = 0;
+  unsigned long timer;
+  while (!button_pushed) {  // Calculate and display pitch until button pushed
+    timer = millis();
+    PitchEst = 0;
+    for (int i = 0; i < 50; i++) {  // Average 50 samples
+      readIMUdata(&accAngle, &gyroRate);
+      PitchEst += accAngle;
+      if (analogRead(buttonPin) > 800) {
+        button_pushed = 1;
+      }
+    }
+    PitchEst /= 50.0f;
+    
+    lcd.setCursor(0, 1);
+    lcd.print("Pitch: ");
+    lcd.print(PitchEst);
+    while (millis() < timer + 250) {
+      if (analogRead(buttonPin) > 800) {
+        button_pushed = 1;
+      }
+    }
+  }
+  BiasEst = 0;
+  
+  for (int i = 0; i < 20; i++) {
+    voltageFilt += (float)analogRead(voltSensePin) * VOLT_PER_COUNT;
+  }
+  voltageFilt /= 20.0f;
+
+  lcd.clear();
+  lcd.print("Go Zippy Go!!");
+  lcd.setCursor(0, 1);
+  lcd.print("Battery: ");
+  lcd.print(voltageFilt);
+  lcd.print(" V");
+  delay(100);
+  LastTime = micros();  
 }
 
 float KalmanFilter(float PitchMeas, float RateMeas) {
@@ -543,22 +516,19 @@ bool calibrateGyro() {
   int16_t gyroYbuffer[50], AcX, AcZ;
 
   gyroYzero = 0;
-  PitchCalOffset = 0;
 
   for (uint8_t i = 0; i < 50; i++) {
-    while (i2cRead(0x3B, i2cBuffer, 14));
-    AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
-    AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
-    PitchCalOffset -= atan2((float)AcX, (float)AcZ) * RAD_TO_DEG;
-    gyroYbuffer[i] = ((i2cBuffer[10] << 8) | i2cBuffer[11]);
+    readIMUdata(&accAngle, &gyroRate);
+    gyroYbuffer[i] = gyroRate;
     gyroYzero += gyroYbuffer[i];
     delay(10);
   }
-  if (!checkMinMax(gyroYbuffer, 50, 2000)) {
+  if (!checkMinMax(gyroYbuffer, 50, 2000)) {  // Check that min and max differ by no more than 2000 counts (15 deg/sec)
+                                              // Note: Zero-rate output spec value is +/- 20 deg/sec, so this value may
+                                              // need to be increased for gyros with large drift
     return 1;
   }
 
-  PitchCalOffset /= 50.0f;
   gyroYzero /= (50.0f * 131.0f);
   return 0;
 }
@@ -638,5 +608,51 @@ void HandleRightMotorInterruptA()
   _RightEncoderTicks += _RightEncoderBSet ? -1 : +1;
 #endif
   bUpdateFlagsShared |= RIGHTENC_FLAG;
+}
+
+void readIMUdata(float *accAngle, float *gyroRate) {
+  while (i2cRead(0x3B, i2cBuffer, 14));
+  int16_t AcX = ((i2cBuffer[0] << 8) | i2cBuffer[1]);
+  int16_t AcZ = ((i2cBuffer[4] << 8) | i2cBuffer[5]);
+  int16_t GyY = ((i2cBuffer[10] << 8) | i2cBuffer[11]);
+
+  *accAngle = -atan2((float)AcX, (float)AcZ) * RAD_TO_DEG;
+  *gyroRate = (float)GyY / 131.0f - gyroYzero; // Convert to deg/s
+}
+
+uint8_t i2cWrite(uint8_t registerAddress, uint8_t data, bool sendStop) {
+  return i2cWrite(registerAddress, &data, 1, sendStop); // Returns 0 on success
+}
+
+uint8_t i2cWrite(uint8_t registerAddress, uint8_t *data, uint8_t length, bool sendStop) {
+  Wire.beginTransmission(IMU);
+  Wire.write(registerAddress);
+  Wire.write(data, length);
+  return(Wire.endTransmission(sendStop)); // Returns 0 on success
+}
+
+uint8_t i2cRead(uint8_t registerAddress, uint8_t *data, uint8_t nbytes) {
+  uint32_t timeOutTimer;
+  Wire.beginTransmission(IMU);
+  Wire.write(registerAddress);
+  uint8_t rcode = Wire.endTransmission(false); // Don't release the bus
+  if (rcode) {
+    return rcode; 
+  }
+  Wire.requestFrom(IMU, nbytes, (uint8_t)true); // Send a repeated start and then release the bus after reading
+  for (uint8_t i = 0; i < nbytes; i++) {
+    if (Wire.available())
+      data[i] = Wire.read();
+    else {
+      timeOutTimer = micros();
+      while (((micros() - timeOutTimer) < 100) && !Wire.available());
+      if (Wire.available())
+        data[i] = Wire.read();
+      else {
+        return 5; // Timeout
+      }
+    }
+  }
+  return 0; // Success
 }
 
