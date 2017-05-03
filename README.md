@@ -27,13 +27,12 @@ Pay close attention to polarity on motor wheels (swapping motor leads as necessa
 Depending on your robot inertia, the PID gains may need to be retuned.  Increase as needed to achieve crisp response without any oscillation.  
 
 Here are a few photos:
+
 <img src="/images/20170430-0002.jpg" alt="Zippy Front" width="350"> <img src="/images/20170430-0001.jpg" alt="Zippy Back" width="350"> 
 
 <img src="/images/IMG_1352.jpg" alt="PCB">
 
 And a few photos of the prototype V1.0 version:
-
-![Zippy](/images/IMG_1362.JPG)
 
 <img src="/images/IMG_1361.JPG" alt="Zippy 1.0 Front" width="350"> <img src="/images/IMG_1362.JPG" alt="Zippy 1.0 Back" width="350">
 
