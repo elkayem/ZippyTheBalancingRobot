@@ -111,6 +111,7 @@ volatile long _RightEncoderTicks = 0;
 #define wheelPosGain 0.0015f
 #define wheelRateGain 0.003f
 #define Kp_Rotation 0.1f
+#define MaxAngleOffset 5.5f
 
 uint32_t LastTime = 0;
 
@@ -214,7 +215,6 @@ void loop(void)
   float TorqueCMD;
   static float TurnTorque;
   int dutyCycle_L = 0, dutyCycle_R = 0;
-  float Kp_fb = 0, Ki_fb = 0, Kd_fb = 0;
   float AngleOffset;
   static unsigned long int CalcTime, MaxCalcTime, AveCalcTime, TimeCounter;
   static int NumSamples;
@@ -320,8 +320,7 @@ void loop(void)
         throttle_glitch_persistent++;
       }
       ThrottleF = (float)ThrottleInGood;
-      AOCmd = (ThrottleF - 1540.0f) / 75.0f; // SteeringIn ranges from 1000 to 2000.  Rescale to -6.7 to +6.7 deg/sec.
-      AOCmd = constrain(AOCmd, -7.0f, 7.0f);
+      AOCmd = (ThrottleF - 1500.0f) / 75.0f; // SteeringIn ranges from 1000 to 2000.  Rescale to -6.7 to +6.7 deg
     }
     else {
       throttle_glitch_persistent++;
@@ -330,25 +329,24 @@ void loop(void)
       }
       AOCmd = 0;
     }
-    AngleOffset = AOCmd;
-    if (abs(AOCmd) > 2.0f) {
-      PosCmd = wheelPosition + 1.0f * wheelVelocity;
-      AngleOffset -=  wheelVelocity * wheelRateGain;
+    AngleOffset = constrain(AOCmd, -MaxAngleOffset, MaxAngleOffset);  // Limits throttle input
+    
+    if (abs(AOCmd) > 1.0f) { // If angle offset command greater than 1 deg, then commanding forward/reverse motion
+       PosCmd = wheelPosition + 1.0f * wheelVelocity;  // Set encoder position command to a location ahead of robot, 
+                                                      // allowing robot to drift to a new location when stopping
+       AngleOffset -=  wheelVelocity * wheelRateGain;
     }
-    else {
-      AngleOffset -= (wheelPosition - PosCmd) * wheelPosGain  + wheelVelocity * wheelRateGain;
+    else { // Stop robot
+      // Apply encoder feedback outer loop
+      AngleOffset -= (wheelPosition - PosCmd) * wheelPosGain  + wheelVelocity * wheelRateGain;  // PD controller
     }
-    AngleOffset = constrain(AngleOffset, -10.0f, 10.0f);
-
+    AngleOffset = constrain(AngleOffset, -MaxAngleOffset, MaxAngleOffset);  // Additional limiter after outer loop
+    
     Error = AngleOffset - PitchEst;
     IntState = IntState + Error / FHz;
     IntState = constrain(IntState, -5.0f, 5.0f);
-
-    Kp_fb = K_p * Error;
-    Ki_fb = K_i * IntState;
-    Kd_fb = -K_d * gyroRate;
-
-    TorqueCMD = Kp_fb + Ki_fb + Kd_fb;
+    
+    TorqueCMD = K_p * Error + K_i * IntState - K_d * gyroRate;  // PID Feedback Control
 
     // Filter SteeringIn and convert to TurnTorque
     if (SteeringIn > 800 && SteeringIn < 2200 && !RechargeBattery) {  // Valid range
