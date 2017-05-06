@@ -6,6 +6,8 @@ Zippy 2.0 is a 3D printed Arduino Nano based balancing robot with a custom PCB. 
 
 The frame can be printed in multiple colors by pausing the print at the right height and switching filament.  The SketchUp 2017 file is included for design customization.  The frame is put together with a few dozen M3x10mm bolts and hex nuts, and four M3 standoffs for the PCB.  I printed the frame in PLA with a 0.2mm layer height and 40% infill.
 
+I've also included an optional set of bumpers, which can protect Zippy in the event of a fall. Wrap the bumpers with pipe insulation tubes for a little extra cushion. Yes, the bumpers detract from Zippy's graceful physique, but make Zippy a little more rugged for kids.
+
 The PCB yields a more compact design than a hand-soldered protoboard, but does require some SMD work and an additional outlay for PCB manufacture.  Even with the fine 0.5 mm pitch, the drivers can be hand soldered to the board (I did!) with a steady hand and patience.  There are plenty of YouTube videos on how to do this.
 
 Here are the important parts for Zippy:
@@ -30,7 +32,7 @@ Here are a few photos:
 
 <img src="/images/20170430-0002.jpg" alt="Zippy Front" width="350"> <img src="/images/20170430-0001.jpg" alt="Zippy Back" width="350"> 
 
-<img src="/images/IMG_1352.jpg" alt="PCB">
+<img src="/images/IMG_1352.jpg" alt="PCB" width="350"> <img src="/images/IMG_1372.JPG" alt="Bumpers" width="350">
 
 And a few photos of the prototype V1.0 version:
 
