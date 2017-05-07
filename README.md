@@ -1,6 +1,7 @@
 # ZippyTheBalancingRobot
 
 [![ZIPPY_VIDEO](https://img.youtube.com/vi/0io5SwitLzY/0.jpg)](https://www.youtube.com/watch?v=0io5SwitLzY) 
+(Click on image above for link to YouTube video)
 
 Zippy 2.0 is a 3D printed Arduino Nano based balancing robot with a custom PCB.  The original prototype version was put together on a breadboard with lots of jumper wires.  This is certainly a great way to get started.  The STMicroelectronics 8A motor drivers do not come in a convenient package for breadboarding, but ST does provide evaluation boards which work well with a prototype system.
 
@@ -27,6 +28,8 @@ I've also included a schematic in the Eagle folder.  Gerber files are provided i
 Pay close attention to polarity on motor wheels (swapping motor leads as necessary) and MPU-6050 orientation.  The software assumes the gyro/accelerometer is mounted with the +X axis facing the front of the robot.  
 
 Depending on your robot inertia, the PID gains may need to be retuned.  Increase as needed to achieve crisp response without any oscillation.  
+
+Also, if you like the colored eyes in [Zippy's video](https://www.youtube.com/watch?v=0io5SwitLzY), I've included the source code for that too.  You need another Arduino Nano or Pro Mini, two RGB LEDs (I used common anode), and six 300 ohm resistors.  The code shows which pins I used.  I just soldered the wires directly to the board, which is attached behind the face plate.  I can control the color, or have a changing rainbow pattern, using my remote control.  I used the left throttle stick on my RC remote.
 
 Here are a few photos:
 
