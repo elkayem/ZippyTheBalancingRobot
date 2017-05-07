@@ -1,6 +1,7 @@
 # ZippyTheBalancingRobot
 
 [![ZIPPY_VIDEO](https://img.youtube.com/vi/0io5SwitLzY/0.jpg)](https://www.youtube.com/watch?v=0io5SwitLzY) 
+
 (Click on image above for link to YouTube video)
 
 Zippy 2.0 is a 3D printed Arduino Nano based balancing robot with a custom PCB.  The original prototype version was put together on a breadboard with lots of jumper wires.  This is certainly a great way to get started.  The STMicroelectronics 8A motor drivers do not come in a convenient package for breadboarding, but ST does provide evaluation boards which work well with a prototype system.
